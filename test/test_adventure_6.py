@@ -1,43 +1,70 @@
+# test_load_inventory.py
 import pytest
-from adventure import discover_artifact
+import adventure
+import os
+import json
 
-def test_discover_artifact_existing():
-    artifacts = {
-        "amulet_of_vitality": {"description": "amulet", "power": 10, "effect": "increases health"}
-    }
-    player_stats = {'health': 50, 'attack': 5}
-    updated_stats, updated_artifacts = discover_artifact(player_stats, artifacts, "amulet_of_vitality")
-    assert updated_stats['health'] == 60
-    assert "amulet_of_vitality" not in updated_artifacts
+INVENTORY_FILE = "test_inventory.json"
 
-def test_discover_artifact_non_existing(capsys):
-    artifacts = {}
-    player_stats = {'health': 50, 'attack': 5}
-    discover_artifact(player_stats, artifacts, "non_existent_artifact")
-    captured = capsys.readouterr()
-    assert "You found nothing of interest." in captured.out
+def teardown_module():
+    if os.path.exists(INVENTORY_FILE):
+        os.remove(INVENTORY_FILE)
 
-def test_discover_artifact_health_effect():
-    artifacts = {
-        "amulet_of_vitality": {"description": "amulet", "power": 10, "effect": "increases health"}
-    }
-    player_stats = {'health': 50, 'attack': 5}
-    updated_stats, _ = discover_artifact(player_stats, artifacts, "amulet_of_vitality")
-    assert updated_stats['health'] == 60
+def test_load_inventory_existing_file():
+    test_inventory_data = {"Potion": 3, "Gold": 10}
+    with open(INVENTORY_FILE, 'w') as f:
+        json.dump(test_inventory_data, f)
 
-def test_discover_artifact_attack_effect():
-    artifacts = {
-        "ring_of_strength": {"description": "ring", "power": 5, "effect": "enhances attack"}
-    }
-    player_stats = {'health': 50, 'attack': 5}
-    updated_stats, _ = discover_artifact(player_stats, artifacts, "ring_of_strength")
-    assert updated_stats['attack'] == 10
+    loaded_inventory = adventure.load_inventory(INVENTORY_FILE)
+    assert loaded_inventory == test_inventory_data
 
-def test_discover_artifact_prints_description(capsys):
-    artifacts = {
-        "amulet_of_vitality": {"description": "A glowing amulet.", "power": 10, "effect": "increases health"}
-    }
-    player_stats = {'health': 50, 'attack': 5}
-    discover_artifact(player_stats, artifacts, "amulet_of_vitality")
-    captured = capsys.readouterr()
-    assert "A glowing amulet." in captured.out
+def test_load_inventory_non_existent_file():
+    if os.path.exists(INVENTORY_FILE):
+        os.remove(INVENTORY_FILE)
+
+    loaded_inventory = adventure.load_inventory(INVENTORY_FILE)
+    assert loaded_inventory == {}
+
+    import io
+    import sys
+    capturedOutput = io.StringIO()
+    sys.stdout = capturedOutput
+    adventure.load_inventory(INVENTORY_FILE)
+    sys.stdout = sys.__stdout__
+    assert f"Inventory file not found. Creating a new one: {INVENTORY_FILE}\n" == capturedOutput.getvalue()
+
+def test_load_inventory_invalid_json():
+    with open(INVENTORY_FILE, 'w') as f:
+        f.write("invalid json data")
+
+    loaded_inventory = adventure.load_inventory(INVENTORY_FILE)
+    assert loaded_inventory == {}
+
+    import io
+    import sys
+    capturedOutput = io.StringIO()
+    sys.stderr = capturedOutput
+    adventure.load_inventory(INVENTORY_FILE)
+    sys.stderr = sys.__stderr__
+    assert "Error loading inventory: Invalid JSON format. Starting with an empty inventory." in capturedOutput.getvalue()
+
+def test_load_inventory_ioerror_handling(monkeypatch):
+    def mock_open_error(*args, **kwargs):
+        raise IOError("Mock IO Error")
+    monkeypatch.setattr("builtins.open", mock_open_error)
+
+    with pytest.raises(IOError) as excinfo:
+        adventure.load_inventory(INVENTORY_FILE)
+    assert "Mock IO Error" in str(excinfo.value)
+
+    import io
+    import sys
+    capturedOutput = io.StringIO()
+    sys.stderr = capturedOutput
+    try:
+        adventure.load_inventory(INVENTORY_FILE)
+    except IOError:
+        pass # Exception is expected, already tested
+    finally:
+        sys.stderr = sys.__stderr__
+    assert "Error loading inventory: Could not read inventory file." in capturedOutput.getvalue()
