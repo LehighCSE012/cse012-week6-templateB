@@ -1,34 +1,93 @@
+# test_main_adventure_flow.py
 import pytest
-from adventure import enter_dungeon
+import adventure
+import os
+import json
+import datetime
 from unittest.mock import patch
-import io
-import sys
 
-def test_tuple_immutability_error_handling(capsys):
-    dungeon_rooms = [("Room 1", "item1", "none", None)]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
+LOG_FILE = "test_adventure_log.txt"
+INVENTORY_FILE = "test_inventory.json"
 
-    enter_dungeon(player_stats, inventory, dungeon_rooms, clues)
-    captured = capsys.readouterr()
-    assert "Error: Cannot modify room tuples - immutable." in captured.out # Correct assertion
+def setup_module():
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+    if os.path.exists(INVENTORY_FILE):
+        os.remove(INVENTORY_FILE)
 
-def test_enter_dungeon_runs_without_crash(monkeypatch):
-    monkeypatch.setattr('builtins.input', lambda _: "skip")
+def teardown_module():
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+    if os.path.exists(INVENTORY_FILE):
+        os.remove(INVENTORY_FILE)
 
-    dungeon_rooms = [
-        ("Room 1", "item1", "none", None),
-        ("Room 2", None, "puzzle", ("success", "fail", -5))
-    ]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
-    try:
-        updated_player_stats, inventory_out, clues_out = enter_dungeon(
-            player_stats, inventory, dungeon_rooms, clues)
-        assert isinstance(updated_player_stats, dict)
-        assert isinstance(inventory_out, list)
-        assert isinstance(clues_out, set)
-    except Exception as e:
-        pytest.fail(f"enter_dungeon raised an exception: {e}")
+def test_main_function_runs_without_error():
+    with patch('builtins.input', return_value="left"): # Mock input for 'left' choice
+        adventure.main(LOG_FILE, INVENTORY_FILE)
+
+def test_main_log_initialization():
+    with patch('builtins.input', return_value="left"):
+        adventure.main(LOG_FILE, INVENTORY_FILE)
+    assert os.path.exists(LOG_FILE)
+    with open(LOG_FILE, 'r') as f:
+        log_content = f.read()
+        assert "Adventure Log Started:" in log_content
+        assert "Adventurer enters the Caves of Orzammar." in log_content
+
+def test_main_inventory_load_and_save():
+    initial_inventory = {"Potion": 1}
+    with open(INVENTORY_FILE, 'w') as f:
+        json.dump(initial_inventory, f)
+
+    with patch('builtins.input', return_value="right"):
+        adventure.main(LOG_FILE, INVENTORY_FILE)
+
+    assert os.path.exists(INVENTORY_FILE)
+    with open(INVENTORY_FILE, 'r') as f:
+        saved_inventory = json.load(f)
+        assert "Torch" in saved_inventory # 'right' path adds Torch
+        assert "Potion" in saved_inventory # Initial item preserved
+
+def test_main_left_path_flow():
+    with patch('builtins.input', return_value="left"):
+        adventure.main(LOG_FILE, INVENTORY_FILE)
+
+    with open(LOG_FILE, 'r') as f:
+        log_content = f.read()
+        assert "Adventurer chose to go left." in log_content
+        assert "Found Rusty Sword." in log_content
+        assert "Found Potion." in log_content
+        assert "Inventory saved before exiting caves." in log_content
+        assert "Adventurer exits the Caves of Orzammar." in log_content
+
+    with open(INVENTORY_FILE, 'r') as f:
+        saved_inventory = json.load(f)
+        assert "Rusty Sword" in saved_inventory
+        assert "Potion" in saved_inventory
+
+def test_main_right_path_flow():
+    with patch('builtins.input', return_value="right"):
+        adventure.main(LOG_FILE, INVENTORY_FILE)
+
+    with open(LOG_FILE, 'r') as f:
+        log_content = f.read()
+        assert "Adventurer chose to go right." in log_content
+        assert "Found Torch." in log_content
+        assert "Inventory saved before exiting caves." in log_content
+        assert "Adventurer exits the Caves of Orzammar." in log_content
+        assert "Found a hidden passage with a riddle:" in log_content # Check for clue log
+
+    with open(INVENTORY_FILE, 'r') as f:
+        saved_inventory = json.load(f)
+        assert "Torch" in saved_inventory
+
+def test_main_invalid_input_flow(monkeypatch):
+    inputs = iter(["invalid", "left"]) # First invalid, then valid 'left'
+    monkeypatch.setattr('builtins.input', lambda _: next(inputs))
+
+    adventure.main(LOG_FILE, INVENTORY_FILE)
+
+    with open(LOG_FILE, 'r') as f:
+        log_content = f.read()
+        assert "Invalid direction input received." in log_content
+        assert "Adventurer chose to go left." in log_content # Should proceed after valid input
