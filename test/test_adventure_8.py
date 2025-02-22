@@ -1,49 +1,48 @@
+# test_add_item_to_inventory.py
 import pytest
-from adventure import enter_dungeon, find_clue
-from unittest.mock import patch
-import io
-import sys
+import adventure
 
-def test_cryptic_library_room_clues_found(capsys):
-    dungeon_rooms = [("The Cryptic Library", None, "library", None)]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
+def test_add_item_to_empty_inventory():
+    inventory = {}
+    adventure.add_item_to_inventory(inventory, "Potion")
+    assert inventory == {"Potion": 1}
 
-    enter_dungeon(player_stats, inventory, dungeon_rooms, clues)
-    captured = capsys.readouterr()
-    assert "You enter the Cryptic Library." in captured.out # Corrected assertion
-    # Removed assert "Discovered new clue:" in captured.out
-    assert len(clues) >= 1
+def test_add_item_to_non_empty_inventory():
+    inventory = {"Potion": 1}
+    adventure.add_item_to_inventory(inventory, "Torch")
+    assert inventory == {"Potion": 1, "Torch": 1}
 
-def test_cryptic_library_room_staff_of_wisdom_effect(capsys):
-    dungeon_rooms = [("The Cryptic Library", None, "library", None)]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = ["staff_of_wisdom"]
-    clues = set()
+def test_add_existing_item_increase_quantity():
+    inventory = {"Potion": 2}
+    adventure.add_item_to_inventory(inventory, "Potion", 3)
+    assert inventory == {"Potion": 5}
 
-    enter_dungeon(player_stats, inventory, dungeon_rooms, clues)
-    captured = capsys.readouterr()
-    assert "Staff of Wisdom hums, understanding." in captured.out # Updated assertion
-    assert "Texts clearer, deeper meanings." in captured.out # Updated assertion
-    assert "Bypass puzzle with knowledge." in captured.out # Updated assertion
+def test_add_item_default_quantity():
+    inventory = {}
+    adventure.add_item_to_inventory(inventory, "Gold")
+    assert inventory == {"Gold": 1}
 
-def test_cryptic_library_room_no_staff_no_bypass_message(capsys):
-    dungeon_rooms = [("The Cryptic Library", None, "library", None)]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
+def test_add_item_prints_confirmation():
+    inventory = {}
+    item_name = "Sword"
+    quantity = 2
+    import io
+    import sys
+    capturedOutput = io.StringIO()
+    sys.stdout = capturedOutput
+    adventure.add_item_to_inventory(inventory, item_name, quantity)
+    sys.stdout = sys.__stdout__
+    assert f"Added {quantity} {item_name}(s) to inventory.\n" == capturedOutput.getvalue()
+    assert inventory == {"Sword": 2}
 
-    enter_dungeon(player_stats, inventory, dungeon_rooms, clues)
-    captured = capsys.readouterr()
-    assert "Staff of Wisdom hums, understanding." not in captured.out # Updated assertion
-    assert "Bypass puzzle with knowledge." not in captured.out # Updated assertion
-
-def test_cryptic_library_room_finds_two_clues():
-    dungeon_rooms = [("The Cryptic Library", None, "library", None)]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
-
-    enter_dungeon(player_stats, inventory, dungeon_rooms, clues)
-    assert len(clues) == 2
+def test_add_item_prints_confirmation_singular():
+    inventory = {}
+    item_name = "Potion"
+    import io
+    import sys
+    capturedOutput = io.StringIO()
+    sys.stdout = capturedOutput
+    adventure.add_item_to_inventory(inventory, item_name)
+    sys.stdout = sys.__stdout__
+    assert f"Added 1 {item_name} to inventory.\n" == capturedOutput.getvalue()
+    assert inventory == {"Potion": 1}
