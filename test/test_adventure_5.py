@@ -1,52 +1,72 @@
+# test_log_entry.py
 import pytest
-from adventure import enter_dungeon  # Assuming enter_dungeon is in adventure.py
-from unittest.mock import patch
-import io
-import sys
+import adventure
+import os
+import datetime
+import time
 
-def test_dungeon_rooms_is_list_of_tuples(monkeypatch, capsys): # Added monkeypatch
-    monkeypatch.setattr('builtins.input', lambda _: "skip") # Mock input to return "skip"
+LOG_FILE = "test_adventure_log.txt"
 
-    dungeon_rooms = [
-        ("Room 1", "item1", "none", None),
-        ("Room 2", None, "puzzle", ("success", "fail", -5))
-    ]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
-    artifacts = {}
+def setup_module():
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+    adventure.initialize_log(LOG_FILE)
+
+def teardown_module():
+    if os.path.exists(LOG_FILE):
+        os.remove(LOG_FILE)
+
+def test_log_entry_writes_entry():
+    test_entry = "Test log entry"
+    adventure.log_entry(LOG_FILE, test_entry)
+    with open(LOG_FILE, 'r') as f:
+        lines = f.readlines()
+        assert len(lines) > 1 # Header + at least one entry
+        last_line = lines[-1]
+        assert test_entry in last_line
+        assert last_line.startswith("[") and last_line.split("]")[1].strip() == f"- {test_entry}"
+
+def test_log_entry_timestamp_format():
+    test_entry = "Timestamp format test"
+    adventure.log_entry(LOG_FILE, test_entry)
+    with open(LOG_FILE, 'r') as f:
+        lines = f.readlines()
+        last_line = lines[-1]
+        timestamp_str = last_line[1:20] # Extract timestamp part
+        try:
+            datetime.datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            pytest.fail("Timestamp is not in correct format")
+
+def test_log_entry_append_mode():
+    entry1 = "First entry"
+    entry2 = "Second entry"
+    adventure.log_entry(LOG_FILE, entry1)
+    adventure.log_entry(LOG_FILE, entry2)
+    with open(LOG_FILE, 'r') as f:
+        lines = f.readlines()
+        assert len(lines) >= 3 # Header + two entries
+        assert entry1 in lines[-2]
+        assert entry2 in lines[-1]
+
+def test_log_entry_ioerror_handling(monkeypatch):
+    def mock_open_error(*args, **kwargs):
+        raise IOError("Mock IO Error")
+    monkeypatch.setattr("builtins.open", mock_open_error)
+
+    test_entry = "Entry causing error"
+    with pytest.raises(IOError) as excinfo:
+        adventure.log_entry(LOG_FILE, test_entry)
+    assert "Mock IO Error" in str(excinfo.value)
+
+    import io
+    import sys
+    capturedOutput = io.StringIO()
+    sys.stderr = capturedOutput
     try:
-        enter_dungeon(player_stats, inventory, dungeon_rooms, clues) # Removed artifacts
-    except Exception as e:
-        pytest.fail(f"enter_dungeon raised an exception with valid dungeon_rooms structure: {e}")
-
-def test_dungeon_room_tuple_structure():
-    dungeon_rooms_bad = [
-        ("Room 1", "item1", "none"), # Missing challenge_outcome
-        ("Room 2", None, "puzzle", "wrong_outcome_type") # outcome not tuple
-    ]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
-    artifacts = {}
-    with pytest.raises(ValueError) as excinfo: # Expect ValueError now
-        enter_dungeon(player_stats, inventory, dungeon_rooms_bad, clues) # Removed artifacts
-    assert "not enough values to unpack" in str(excinfo.value).lower() # More specific assertion
-
-def test_dungeon_rooms_challenge_types(monkeypatch, capsys): # Added monkeypatch
-    monkeypatch.setattr('builtins.input', lambda _: "skip") # Mock input to return "skip"
-
-    dungeon_rooms_types = [
-        ("Room none", None, "none", None),
-        ("Room puzzle", None, "puzzle", ("success", "fail", -5)),
-        ("Room trap", None, "trap", ("success", "fail", -5)),
-        ("Room library", None, "library", None)
-    ]
-    player_stats = {'health': 100, 'attack': 5}
-    inventory = []
-    clues = set()
-    artifacts = {}
-    try:
-        enter_dungeon(player_stats, inventory, dungeon_rooms_types, clues) # Removed artifacts
-    except Exception as e:
-        pytest.fail(f"enter_dungeon failed to handle all challenge types: {e}")
+        adventure.log_entry(LOG_FILE, test_entry)
+    except IOError:
+        pass # Exception is expected, already tested
+    finally:
+        sys.stderr = sys.__stderr__
+    assert "Error writing to adventure log: Could not write entry." in capturedOutput.getvalue()
